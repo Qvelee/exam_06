@@ -1,209 +1,218 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   mini_serv.c                                        :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: nelisabe <nelisabe@student.42.fr>          +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2021/07/27 10:15:05 by nelisabe          #+#    #+#             */
-/*   Updated: 2021/08/14 09:24:23 by nelisabe         ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
-# include <errno.h>
-# include <string.h>
-# include <strings.h>
-# include <unistd.h>
-# include <netdb.h>
-# include <sys/socket.h>
-# include <netinet/in.h>
 # include <stdlib.h>
+# include <unistd.h>
 # include <sys/select.h>
+# include <sys/socket.h>
 # include <stdio.h>
+# include <string.h>
+# include <netdb.h>
 
-// int extract_message(char **buf, char **msg)
-// {
-// 	char	*newbuf;
-// 	int	i;
-
-// 	*msg = 0;
-// 	if (*buf == 0)
-// 		return (0);
-// 	i = 0;
-// 	while ((*buf)[i])
-// 	{
-// 		if ((*buf)[i] == '\n')
-// 		{
-// 			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
-// 			if (newbuf == 0)
-// 				return (-1);
-// 			strcpy(newbuf, *buf + i + 1);
-// 			*msg = *buf;
-// 			(*msg)[i + 1] = 0;
-// 			*buf = newbuf;
-// 			return (1);
-// 		}
-// 		i++;
-// 	}
-// 	return (0);
-// }
-
-// char	*str_join(char *buf, char *add)
-// {
-// 	char	*newbuf;
-// 	int		len;
-
-// 	if (buf == 0)
-// 		len = 0;
-// 	else
-// 		len = strlen(buf);
-// 	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
-// 	if (newbuf == 0)
-// 		return (0);
-// 	newbuf[0] = 0;
-// 	if (buf != 0)
-// 		strcat(newbuf, buf);
-// 	free(buf);
-// 	strcat(newbuf, add);
-// 	return (newbuf);
-// }
-
-int		error(void)
+int		server_socket;
+int		max_fd;
+fd_set	read_fds;
+fd_set	write_fds;
+fd_set	clients_fds;
+typedef struct	clients_s
 {
-	write(2, "Fatal error\n", strlen("Fatal error\n"));
-	return 1;
-}
+	int		fd;
+	char	*message;
+}				clients_t;
+clients_t	clients[60000];
 
-void	accept_new_client(int server_socket, int *clients,\
-	fd_set *read_fds, fd_set *write_fds)
+int extract_message(char **buf, char **msg)
 {
-	int		i = -1;
-	int		new_client;
+	char	*newbuf;
+	int	i;
 
-	if (!FD_ISSET(server_socket, read_fds))
-		return;
-	new_client = accept(server_socket, NULL, NULL);
-	while (clients[++i] = -1)
-		if (clients[i] != -2 && FD_ISSET(clients[i], write_fds))
-		{
-			char	message[60];
-
-			sprintf(message, "server: client %d just arrived\n", i);
-			send(clients[i], message, strlen(message), 0);
-		}
-	clients[i] = new_client;
-}
-
-int		init_sockets_fds(int server_socket, int *clients,
-	fd_set *read_fds, fd_set *write_fds)
-{
-	int		i = -1;
-	int		max_fd = server_socket;
-
-	FD_SET(server_socket, read_fds);
-	while (clients[++i] != -1)
+	*msg = 0;
+	if (*buf == 0)
+		return (0);
+	i = 0;
+	while ((*buf)[i])
 	{
-		FD_SET(clients[i], read_fds);
-		FD_SET(clients[i], write_fds);
-		if (clients[i] > max_fd)
-			max_fd = clients[i];
+		if ((*buf)[i] == '\n')
+		{
+			newbuf = calloc(1, sizeof(*newbuf) * (strlen(*buf + i + 1) + 1));
+			if (newbuf == 0)
+				return (-1);
+			strcpy(newbuf, *buf + i + 1);
+			*msg = *buf;
+			(*msg)[i + 1] = 0;
+			*buf = newbuf;
+			return (1);
+		}
+		i++;
 	}
-	return max_fd;
+	return (0);
 }
 
-void	send_to_all(int	*clients, char *message, )
+char	*str_join(char *buf, char *add)
 {
-	
+	char	*newbuf;
+	int		len;
+
+	if (buf == 0)
+		len = 0;
+	else
+		len = strlen(buf);
+	newbuf = malloc(sizeof(*newbuf) * (len + strlen(add) + 1));
+	if (newbuf == 0)
+		return (0);
+	newbuf[0] = 0;
+	if (buf != 0)
+		strcat(newbuf, buf);
+	free(buf);
+	strcat(newbuf, add);
+	return (newbuf);
 }
 
-int		connetion(int socket_ID, int *clients)
+void	error_exit(char *message)
 {
-	fd_set	read_fds;
-	fd_set	write_fds;
-	int		i;
-	int		max_fd;
+	write(2, message, strlen(message));
+	write(2, "\n", 1);
+	if (server_socket != -1)
+		close(server_socket);
+	exit(1);
+}
 
-	FD_ZERO(&read_fds);
-	FD_ZERO(&write_fds);
-	max_fd = init_sockets_fds(socket_ID, clients, &read_fds, &write_fds);
-	if (select(max_fd + 1, &read_fds, &write_fds, NULL, NULL) == -1)
+int		setup(int	port)
+{
+	struct sockaddr_in	_sockaddr_in;
+
+	_sockaddr_in.sin_family = AF_INET;
+	_sockaddr_in.sin_port = htons(port);
+	_sockaddr_in.sin_addr.s_addr = (1 << 24) | 127;
+	if ((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == -1)
+		return 1;
+	socklen_t	len = sizeof(_sockaddr_in);
+	if (bind(server_socket, (struct sockaddr*)&_sockaddr_in, len) == -1)
 		return -1;
-	accept_new_client(socket_ID, clients, &read_fds, &write_fds);
-	i = -1;
-	while (clients[++i] != -1)
-	{
-		if (clients[i] != -2 && FD_ISSET(clients[i], &read_fds))
-		{
-			int		bytes;
-			char	buffer[65536];
-
-			bytes = recv(clients[i], buffer, 65536, 0);
-			if (bytes > 0)
-			{
-				buffer[bytes] = '\0';
-				
-			}
-			else
-			{
-				//close
-			}
-		}
-	}
+	if (listen(server_socket, 120) == -1)
+		return -1;
 	return 0;
 }
 
-int		setup(int port)
+void	add_message_to_clients(char *message, int sender)
 {
-	int				socket_Id;
-	struct sockaddr_in	socket_parameters_in;
+	char	buffer[60];
 
-	bzero(&socket_parameters_in, sizeof(socket_parameters_in));
-	if ((socket_Id = socket(AF_INET, SOCK_STREAM, 0)) == -1)
-		return -1;
-	socket_parameters_in.sin_family = AF_INET;
-	socket_parameters_in.sin_port = htons(port);
-	socket_parameters_in.sin_addr.s_addr = (1 << 24) | 127;
-	if (bind(socket_Id, (struct sockaddr*)(&socket_parameters_in),\
-		sizeof(socket_parameters_in)) == -1)
+	sprintf(buffer, message, sender);
+	for (int i = 0; clients[i].fd != -2; ++i)
+		if (clients[i].fd != -1 && i != sender)
+			clients[i].message = str_join(clients[i].message, buffer);
+}
+
+void	add_message_to_clients_no_p(char *message, int sender)
+{
+	for (int i = 0; clients[i].fd != -2; ++i)
+		if (clients[i].fd != -1 && i != sender)
+			clients[i].message = str_join(clients[i].message, message);
+}
+
+void	accept_new_client()
+{
+	int		i;
+
+	for (i = 0; clients[i].fd != -2; ++i);
+	if ((clients[i].fd = accept(server_socket, NULL, NULL)) == -1)
 	{
-		close(socket_Id);
-		return -1;
+		clients[i].fd = -2;
+		return;
 	}
-	if (listen(socket_Id, 5) == -1)
+	if (clients[i].fd > max_fd)
+		max_fd = clients[i].fd;
+	FD_SET(clients[i].fd, &clients_fds);
+	add_message_to_clients("server: client %d just arrived\n", i);
+}
+
+void	read_from_client(int client)
+{
+	if (!FD_ISSET(clients[client].fd, &read_fds))
+		return;
+	int		status;
+	char	*buffer = calloc(42, 4096);
+	status = recv(clients[client].fd, buffer, 64535, 0);
+	if (status == 0)
 	{
-		close(socket_Id);
-		return -1;
+		FD_CLR(clients[client].fd, &clients_fds);
+		close(clients[client].fd);
+		clients[client].fd = -1;
+		free(clients[client].message);
+		clients[client].message = NULL;
+		add_message_to_clients("server: client %d just left\n", client);
 	}
-	return socket_Id;
+	else if (status > 0)
+	{
+		char	*message;
+
+		while (extract_message(&buffer, &message))
+		{
+			add_message_to_clients("client %d: ", client);
+			add_message_to_clients_no_p(message, client);
+			free(message);
+		}
+	}
+	free(buffer);
+}
+
+void	send_message_to_client(int client)
+{
+	if (!FD_ISSET(clients[client].fd, &write_fds))
+		return;
+	if (clients[client].message != NULL)
+	{
+		send(clients[client].fd, clients[client].message, strlen(clients[client].message), 0);
+		free(clients[client].message);
+		clients[client].message = NULL;
+	}
+}
+
+int		connection()
+{
+	if (select(max_fd + 1, &read_fds, &write_fds, NULL, NULL) == -1)
+		return -1;
+	if (FD_ISSET(server_socket, &read_fds))
+		accept_new_client();
+	for (int i = 0; clients[i].fd != -2; ++i)
+		if (clients[i].fd != -1)
+			read_from_client(i);
+	for (int i = 0; clients[i].fd != -2; ++i)
+		if (clients[i].fd != -1)
+			send_message_to_client(i);
+	return 0;
 }
 
 int		main(int argc, char **argv)
 {
-	int		socket_ID;
-	int		port;
-	int		clients[65536];
-
+	server_socket = -1;
 	if (argc != 2)
-	{
-		write(2, "Wrong number of arguments\n",\
-			strlen("Wrong number of arguments\n"));
-		return (1);
-	}
-	port = atoi(argv[1]);
-	if ((socket_ID = setup(port)) == -1)
-		return error();
-	for (int i = 0; i < 65536; i++)
-		clients[i] = -1;
-	while (1)
-		if (connetion(socket_ID, clients) == -1)
-		{
-			int		i = -1;
+		error_exit("Wrong number of arguments");
+	if (setup(atoi(argv[1])))
+		error_exit("Fatal error");
+	int		status;
 
-			close(socket_ID);
-			while (clients[++i] != -1)
-				if (clients[i] != -2)
-					close(clients[i]);
-			return error();
+	FD_ZERO(&clients_fds);
+	FD_SET(server_socket, &clients_fds);
+	max_fd = server_socket;
+	for (int i = 0; i < 60000; ++i)
+	{
+		clients[i].fd = -2;
+		clients[i].message = NULL;
+	}
+	while (1)
+	{
+		read_fds = write_fds = clients_fds;
+		status = connection();
+		if (status == -1)
+		{
+			for (int i = 0; i < 60000; ++i)
+			{
+				if (clients[i].fd > 0)
+					close(clients[i].fd);
+				if (clients[i].message != NULL)
+					free(clients[i].message);
+			}
+			error_exit("Fatal error");
 		}
+	}
 	return 0;
 }
